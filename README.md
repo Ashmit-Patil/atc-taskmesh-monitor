@@ -4,6 +4,9 @@
 
 **A high-reliability distributed cluster coordinator for real-time Air Traffic Control telemetry, dynamic task load balancing, and automated disaster failover.**
 
+🔗 **Live Demo (GitHub Pages):** [https://ashmit-patil.github.io/atc-taskmesh-monitor/](https://ashmit-patil.github.io/atc-taskmesh-monitor/)  
+📦 **Repository:** [https://github.com/Ashmit-Patil/atc-taskmesh-monitor](https://github.com/Ashmit-Patil/atc-taskmesh-monitor)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Status: Production Ready](https://img.shields.io/badge/Status-Complete-emerald.svg)]()
 [![Distributed Systems](https://img.shields.io/badge/Domain-Distributed%20Systems-orange.svg)]()
