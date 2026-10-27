@@ -1,0 +1,21 @@
+{
+  "name": "atc-taskmesh-monitor",
+  "version": "1.0.0",
+  "description": "Distributed ATC taskMesh & task scheduling monitor dashboard featuring automated primary-secondary failover and weighted round robin load balancing.",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "distributed-systems",
+    "atc",
+    "load-balancing",
+    "failover",
+    "taskmesh",
+    "task-scheduling",
+    "weighted-round-robin",
+    "high-availability"
+  ],
+  "author": "Ashmit Patil",
+  "license": "MIT"
+}

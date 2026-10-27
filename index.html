@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ATC TaskMesh — Distributed ATC Server & Task Scheduling Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ---------- tokens: light (default), dark by system setting or data-theme ---------- */
+:root{
+  --bg:#e4e9ee; --panel:#f7f9fb; --strip:#ffffff;
+  --line:#d3dae2; --line-strong:#aab5c2;
+  --text:#15232f; --muted:#576777;
+  --s1:#1f5fc4; --s2:#c4600a;
+  --ok:#1a7f4b; --bad:#c93030; --warn:#a86b00;
+  --t-intl:#6a4cc2; --t-cargo:#0c7f80;
+  --f-display:'Barlow Condensed','Arial Narrow',Arial,sans-serif;
+  --f-body:'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e161d; --panel:#152029; --strip:#1c2a35;
+    --line:#2a3a47; --line-strong:#43586a;
+    --text:#e3ebf2; --muted:#8ea1b2;
+    --s1:#5e9bff; --s2:#ff9b45;
+    --ok:#46d18a; --bad:#ff6b6b; --warn:#f0b955;
+    --t-intl:#b39bff; --t-cargo:#4fd1c5;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e161d; --panel:#152029; --strip:#1c2a35;
+  --line:#2a3a47; --line-strong:#43586a;
+  --text:#e3ebf2; --muted:#8ea1b2;
+  --s1:#5e9bff; --s2:#ff9b45;
+  --ok:#46d18a; --bad:#ff6b6b; --warn:#f0b955;
+  --t-intl:#b39bff; --t-cargo:#4fd1c5;
+}
+
+/* ---------- base ---------- */
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:400 14px/1.4 var(--f-body);-webkit-font-smoothing:antialiased}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+
+.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) 116px;gap:12px;padding:12px 16px}
+
+/* ---------- header ---------- */
+.top{display:flex;flex-direction:column;gap:10px}
+.hdr{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px}
+.brand h1{margin:0;font:700 27px/1 var(--f-display);letter-spacing:.01em}
+.brand p{margin:3px 0 0;color:var(--muted);font-size:13px}
+.servers{display:flex;flex-wrap:wrap;gap:10px}
+.chip{--c:var(--s1);display:flex;align-items:center;gap:10px;padding:6px 14px 6px 12px;background:var(--panel);border:1px solid var(--line-strong);border-left:5px solid var(--c);border-radius:3px}
+.chip.c2{--c:var(--s2)}
+.chip .nm{font-weight:600;line-height:1.15}
+.chip .state{font-size:13px;color:var(--muted);line-height:1.15}
+.dot{width:11px;height:11px;border-radius:50%;flex:none;background:var(--muted)}
+.dot.up{background:var(--ok)}
+.dot.down{background:var(--bad)}
+.dot.sync{background:var(--warn);animation:blink 1s steps(2,end) infinite}
+.dot.standby{background:transparent;border:2px solid var(--muted)}
+@keyframes blink{50%{opacity:.25}}
+.controls{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.btn{padding:8px 13px;border:1px solid var(--line-strong);background:var(--panel);border-radius:3px;cursor:pointer;font-weight:500}
+.btn:hover:not(:disabled){background:var(--strip)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.danger{--bc:var(--bad);border-color:var(--bc);color:var(--bc)}
+.btn.good{--bc:var(--ok);border-color:var(--bc);color:var(--bc)}
+.btn.danger:hover:not(:disabled),.btn.good:hover:not(:disabled){background:var(--bc);color:var(--panel)}
+.btn.small{padding:5px 10px;font-size:12px}
+.pick{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+.pick select{padding:7px 8px;border:1px solid var(--line-strong);background:var(--panel);border-radius:3px;color:var(--text)}
+.clock{font:500 15px var(--f-mono);min-width:84px;text-align:right}
+
+.banner{--bc:var(--bad);display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding:9px 14px;border-left:6px solid var(--bc);border-radius:3px;background:color-mix(in srgb,var(--bc) 12%,var(--panel))}
+.banner[hidden]{display:none}
+.banner.warn{--bc:var(--warn)}
+.banner.ok{--bc:var(--ok)}
+.banner.info{--bc:var(--s1)}
+.banner strong{font:700 16px var(--f-display);letter-spacing:.02em}
+
+.filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 14px}
+.field{display:flex;flex-direction:column;gap:3px}
+.field span{font-size:12px;color:var(--muted)}
+.field select{min-width:150px;padding:7px 9px;border:1px solid var(--line-strong);background:var(--panel);border-radius:3px;color:var(--text)}
+.filters .note{margin-left:auto;font-size:12px;color:var(--muted);max-width:300px}
+
+/* ---------- balance panel (experiment 7) ---------- */
+.balance{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:10px 14px;background:var(--panel);border:1px solid var(--line-strong);border-radius:4px}
+.balance[hidden]{display:none}
+.balance .grp{display:flex;align-items:center;gap:8px}
+.balance .grp span{font-size:12px;color:var(--muted)}
+.wt{width:44px;padding:6px 6px;border:1px solid var(--line-strong);background:var(--strip);border-radius:3px;color:var(--text);text-align:center}
+.wt:disabled{opacity:.5}
+.split{display:flex;align-items:center;gap:14px;margin-left:auto}
+.split .row{display:flex;align-items:center;gap:8px}
+.split .lab{font:600 13px var(--f-display);letter-spacing:.02em;width:20px}
+.split .lab.s2{color:var(--s2)}
+.split .lab.s1{color:var(--s1)}
+.split .track{width:130px;height:9px;border-radius:5px;background:var(--line);overflow:hidden}
+.split .track i{display:block;height:100%;background:var(--s1)}
+.split .track.s2 i{background:var(--s2)}
+.split .num{font:12px var(--f-mono);color:var(--muted);min-width:78px}
+.balance .desc{flex-basis:100%;font-size:12px;color:var(--muted)}
+
+/* ---------- panels ---------- */
+.main{min-height:0;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px}
+.side{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.panel{min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line-strong);border-radius:4px;overflow:hidden}
+.panel.s1{border-top:4px solid var(--s1)}
+.panel.s2{border-top:4px solid var(--s2)}
+.phead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)}
+.phead h2{margin:0;font:600 18px var(--f-display);letter-spacing:.01em}
+.phead .meta{font-size:12px;color:var(--muted)}
+.scroll{flex:1;min-height:0;overflow:auto}
+
+/* ---------- flight strips ---------- */
+.rack{display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:color-mix(in srgb,var(--bg) 55%,var(--panel))}
+.rack:empty{padding:0}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.empty[hidden]{display:none}
+
+.strip{--srv:var(--s1);display:grid;grid-template-columns:minmax(92px,.7fr) minmax(0,3fr) minmax(96px,.9fr) 88px;background:var(--strip);border:1px solid var(--line-strong);border-left:7px solid var(--srv);border-radius:3px}
+.strip.s2{--srv:var(--s2)}
+.strip.fresh{animation:arrive 1.6s ease-out}
+@keyframes arrive{from{background:color-mix(in srgb,var(--srv) 30%,var(--strip))}to{background:var(--strip)}}
+.cell{padding:7px 12px;border-right:1px solid var(--line);min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.cell.d{border-right:0}
+.fno{font:500 15px var(--f-mono)}
+.type{font-size:12px;color:var(--muted)}
+.type.t-international{color:var(--t-intl)}
+.type.t-cargo{color:var(--t-cargo)}
+.route{display:grid;grid-template-columns:minmax(0,1fr) minmax(46px,.9fr) minmax(0,1fr);align-items:center;gap:8px}
+.city{display:flex;flex-direction:column;min-width:0}
+.city.r{text-align:right}
+.cname{font:600 22px/1.05 var(--f-display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccode{font:400 11px var(--f-mono);color:var(--muted)}
+.path{display:flex;align-items:center;gap:2px;color:var(--muted)}
+.path .line{flex:1;border-top:2px dashed var(--line-strong)}
+.path svg{flex:none;transform:rotate(90deg)}
+.lbl{font-size:11px;color:var(--muted)}
+.val{font:500 15px var(--f-mono)}
+.sub{font:400 11px var(--f-mono);color:var(--muted)}
+.foot{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:3px 12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.foot .sw{width:9px;height:9px;background:var(--srv);border-radius:1px}
+.foot b{font-weight:600;color:var(--text)}
+
+/* ---------- server tables ---------- */
+.strip-note{display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px;--bc:var(--muted);background:color-mix(in srgb,var(--bc) 10%,var(--panel))}
+.strip-note.ok{--bc:var(--ok)}
+.strip-note.bad{--bc:var(--bad)}
+.strip-note.warn{--bc:var(--warn)}
+.strip-note.s2{--bc:var(--s2)}
+.bar{flex:0 0 110px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--warn);width:0;transition:width .1s linear}
+.panel.down .scroll{opacity:.42;filter:grayscale(1)}
+table{width:100%;border-collapse:collapse;font:12px/1.3 var(--f-mono);white-space:nowrap}
+th{position:sticky;top:0;z-index:1;text-align:left;font:600 12px var(--f-body);color:var(--muted);background:var(--panel);padding:6px 12px;border-bottom:1px solid var(--line-strong)}
+td{padding:5px 12px;border-bottom:1px solid var(--line)}
+tr.fresh{--fl:var(--s1);animation:rowflash 1.4s ease-out}
+tr.fresh.s2{--fl:var(--s2)}
+tr.fresh.sync{--fl:var(--ok)}
+@keyframes rowflash{from{background:color-mix(in srgb,var(--fl) 34%,transparent)}to{background:transparent}}
+.via{padding:1px 7px;border:1px solid currentColor;border-radius:9px;font-size:11px}
+.via.s1{color:var(--s1)}
+.via.s2{color:var(--s2)}
+.via.ok{color:var(--ok)}
+
+/* ---------- log ---------- */
+.log{padding:4px 0;font:12px/1.35 var(--f-mono)}
+.ln{display:flex;gap:12px;padding:2px 12px}
+.ln time{color:var(--muted);flex:none}
+.ln.bad span{color:var(--bad)}
+.ln.warn span{color:var(--warn)}
+.ln.ok span{color:var(--ok)}
+
+/* ---------- small screens: page scrolls ---------- */
+@media (max-width:920px){
+  html,body{height:auto}
+  .app{height:auto;display:flex;flex-direction:column}
+  .main{display:flex;flex-direction:column}
+  .feedp{height:70vh;min-height:420px}
+  .side{display:flex;flex-direction:column}
+  .side .panel{height:340px}
+  .logp{height:150px}
+  .controls{margin-left:0}
+  .filters .note{margin-left:0;max-width:none}
+  .split{margin-left:0}
+}
+@media (max-width:640px){
+  .strip{grid-template-columns:1fr 1fr}
+  .cell{border-right:0;border-bottom:1px solid var(--line)}
+  .cell.a{order:1}.cell.d{order:2;align-items:flex-end}
+  .cell.b{order:3;grid-column:1/-1}
+  .cell.c{order:4;grid-column:1/-1}
+  .foot{order:5}
+  .field{flex:1 1 140px}.field select{width:100%}
+  .split .track{width:90px}
+}
+@media (prefers-reduced-motion: reduce){
+  .strip.fresh,tr.fresh,.dot.sync{animation:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <header class="hdr">
+      <div class="brand">
+        <h1>ATC network monitor</h1>
+        <p id="tagline">Simulated demo. Server 1 is primary, Server 2 takes over if it goes down.</p>
+      </div>
+      <div class="servers">
+        <div class="chip c1"><span class="dot up" id="dot1"></span><div><div class="nm" id="nm1">Server 1</div><div class="state" id="st1">Up, primary</div></div></div>
+        <div class="chip c2"><span class="dot standby" id="dot2"></span><div><div class="nm" id="nm2">Server 2</div><div class="state" id="st2">Standby, replicating</div></div></div>
+      </div>
+      <div class="controls">
+        <label class="pick">Experiment
+          <select id="modeSel">
+            <option value="failover" selected>6 — Failover</option>
+            <option value="balanced">7 — Load balancing</option>
+          </select>
+        </label>
+        <span id="failoverBtns">
+          <button class="btn danger" id="btnCrash">Crash Server 1</button>
+          <button class="btn good" id="btnRestore" disabled>Restore Server 1</button>
+        </span>
+        <button class="btn" id="btnPause">Pause traffic</button>
+        <label class="pick">Traffic
+          <select id="rate"><option value="2600">Slow</option><option value="1500" selected>Normal</option><option value="600">Fast</option></select>
+        </label>
+        <div class="clock" id="clock">--:--:--</div>
+      </div>
+    </header>
+
+    <div class="banner" id="banner" role="status" aria-live="polite" hidden></div>
+
+    <div class="balance" id="balancePanel" hidden>
+      <div class="grp">
+        <span>Algorithm</span>
+        <select id="algoSel">
+          <option value="weighted" selected>Weighted round robin</option>
+          <option value="round_robin">Round robin</option>
+        </select>
+      </div>
+      <div class="grp">
+        <span>Weight S1 : S2</span>
+        <input class="wt" id="w1" type="number" min="1" max="9" value="3">
+        <span>:</span>
+        <input class="wt" id="w2" type="number" min="1" max="9" value="1">
+      </div>
+      <div class="grp">
+        <button class="btn small danger" id="btnCrash1">Crash S1</button>
+        <button class="btn small good" id="btnRestore1" disabled>Restore S1</button>
+      </div>
+      <div class="grp">
+        <button class="btn small danger" id="btnCrash2">Crash S2</button>
+        <button class="btn small good" id="btnRestore2" disabled>Restore S2</button>
+      </div>
+      <div class="split">
+        <div class="row"><span class="lab s1">S1</span><span class="track"><i id="bar1" style="width:0%"></i></span><span class="num" id="num1">0 (0%)</span></div>
+        <div class="row"><span class="lab s2">S2</span><span class="track s2"><i id="bar2" style="width:0%"></i></span><span class="num" id="num2">0 (0%)</span></div>
+      </div>
+      <p class="desc" id="balanceDesc"></p>
+    </div>
+
+    <div class="filters">
+      <label class="field"><span>ATC</span><select id="fAtc"></select></label>
+      <label class="field"><span>Source city</span><select id="fSrc"></select></label>
+      <label class="field"><span>Destination</span><select id="fDst"></select></label>
+      <label class="field"><span>Flight type</span><select id="fType"></select></label>
+      <button class="btn" id="btnClear">Clear filters</button>
+      <p class="note">The ATC filter matches origin or landing tower. Filters only change the feed; the server tables always show every record.</p>
+    </div>
+  </div>
+
+  <main class="main">
+    <section class="panel feedp" aria-label="Flight feed">
+      <div class="phead"><h2>Flight feed</h2><span class="meta" id="feedCount"></span></div>
+      <div class="scroll">
+        <div class="rack" id="feed"></div>
+        <div class="empty" id="empty" hidden></div>
+      </div>
+    </section>
+
+    <div class="side">
+      <section class="panel s1" id="p1" aria-label="Server 1 records">
+        <div class="phead"><h2 id="h1">Server 1 (primary)</h2><span class="meta" id="cnt1">0 records</span></div>
+        <div class="strip-note" id="note1"></div>
+        <div class="scroll"><table><thead><tr><th>Flight</th><th>Route</th><th>Stored at</th><th>How it arrived</th></tr></thead><tbody id="tb1"></tbody></table></div>
+      </section>
+      <section class="panel s2" id="p2" aria-label="Server 2 records">
+        <div class="phead"><h2 id="h2">Server 2 (secondary)</h2><span class="meta" id="cnt2">0 records</span></div>
+        <div class="strip-note" id="note2"></div>
+        <div class="scroll"><table><thead><tr><th>Flight</th><th>Route</th><th>Stored at</th><th>How it arrived</th></tr></thead><tbody id="tb2"></tbody></table></div>
+      </section>
+    </div>
+  </main>
+
+  <section class="panel logp" aria-label="System log">
+    <div class="phead"><h2>System log</h2><span class="meta">Newest first</span></div>
+    <div class="scroll log" id="log"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* =====================================================================
+   Reference data (in a real system this comes from config)
+   ===================================================================== */
+const CITIES = [
+  {name:'Mumbai',code:'BOM',in:true},   {name:'Delhi',code:'DEL',in:true},
+  {name:'Bengaluru',code:'BLR',in:true},{name:'Chennai',code:'MAA',in:true},
+  {name:'Kolkata',code:'CCU',in:true},  {name:'Hyderabad',code:'HYD',in:true},
+  {name:'Ahmedabad',code:'AMD',in:true},{name:'Goa',code:'GOI',in:true},
+  {name:'Dubai',code:'DXB'},            {name:'Singapore',code:'SIN'},
+  {name:'London',code:'LHR'},           {name:'New York',code:'JFK'},
+  {name:'Doha',code:'DOH'},             {name:'Frankfurt',code:'FRA'}
+];
+const DOMESTIC_CITIES = CITIES.filter(c => c.in);
+const ABROAD_CITIES   = CITIES.filter(c => !c.in);
+const TYPES = ['domestic','international','cargo'];
+
+const rnd = n => Math.floor(Math.random()*n);
+const pick = a => a[rnd(a.length)];
+const randInt = (a,b) => a + rnd(b-a+1);
+
+/* =====================================================================
+   Event bus. The UI below only listens to these events, so swapping the
+   simulator for a WebSocket that emits the same events needs no UI change:
+     flight_created  {flight}
+     record_stored   {server:'S1'|'S2', record}
+     server_status   {server:'S1'|'S2', status:'UP'|'DOWN'|'SYNCING', at, missing?, balanced?}
+     sync_progress   {copied, remaining}
+     mode_changed    {mode:'failover'|'balanced'}
+     balance_config  {algo, w1, w2}
+   ===================================================================== */
+const handlers = {};
+const bus = {
+  on(type, fn){ (handlers[type] = handlers[type] || []).push(fn); },
+  emit(type, payload){ (handlers[type] || []).forEach(fn => fn(payload)); }
+};
+
+/* =====================================================================
+   SIMULATED BACKEND: replace this whole block with a real connection later
+   ===================================================================== */
+const sim = (() => {
+  const st = {
+    mode:'failover', s1:'UP', s2:'UP', seq:0, paused:false, rate:1500,
+    timer:null, syncTimer:null, copied:0,
+    algo:'weighted', w1:3, w2:1, cw:{s1:0, s2:0}, bothDownLogged:false
+  };
+  const s1ids = new Set();
+  let s2 = [];
+  const AIR = {domestic:['AI','6E','UK','SG','IX'], international:['AI','EK','SQ','BA','QR','LH'], cargo:['FX','5X','QY','CV','KZ']};
+
+  function createFlight(at){
+    const r = Math.random();
+    const type = r < .5 ? 'domestic' : r < .85 ? 'international' : 'cargo';
+    let a, b;
+    if(type === 'domestic'){ a = pick(DOMESTIC_CITIES); do{ b = pick(DOMESTIC_CITIES); }while(b === a); }
+    else if(type === 'international'){
+      if(Math.random() < .5){ a = pick(DOMESTIC_CITIES); b = pick(ABROAD_CITIES); }
+      else { a = pick(ABROAD_CITIES); b = pick(DOMESTIC_CITIES); }
+    } else { a = pick(CITIES); do{ b = pick(CITIES); }while(b === a); }
+    return {
+      id: ++st.seq,
+      flightNo: pick(AIR[type]) + ' ' + randInt(101,989),
+      type,
+      source:{name:a.name, code:a.code},
+      destination:{name:b.name, code:b.code},
+      originATC:'ATC-' + a.code,
+      landingATC:'ATC-' + b.code,
+      timestamp: at - randInt(25,110),   // when the origin tower sent it
+      handledBy: null
+    };
+  }
+
+  function store(server, f, at, via, lagMs){
+    const rec = {id:f.id, flightNo:f.flightNo, src:f.source.code, dst:f.destination.code, storedAt:at, via, lagMs};
+    if(server === 'S1') s1ids.add(f.id);
+    else { s2.push(rec); if(s2.length > 1000) s2.shift(); }
+    bus.emit('record_stored', {server, record:rec});
+  }
+
+  /* ---- experiment 6: failover ---- */
+  function ingestFailover(at){
+    const f = createFlight(at);
+    if(st.s1 === 'UP'){
+      f.handledBy = 'S1'; f.via = 'failover';
+      bus.emit('flight_created', {flight:f});
+      store('S1', f, at, 'direct');
+      const lag = randInt(40,160);                       // replication delay S1 -> S2
+      setTimeout(() => store('S2', f, at + lag, 'replica', lag), lag);
+    } else {
+      f.handledBy = 'S2'; f.via = 'failover';             // failover: secondary takes the flight
+      bus.emit('flight_created', {flight:f});
+      store('S2', f, at, 'direct');
+    }
+  }
+
+  function missingOnS1(){ return s2.filter(r => !s1ids.has(r.id)).sort((a,b) => a.id - b.id); }
+
+  function syncTick(){
+    const missing = missingOnS1();
+    if(!missing.length){
+      clearInterval(st.syncTimer); st.syncTimer = null;
+      st.s1 = 'UP';
+      bus.emit('server_status', {server:'S1', status:'UP', at:Date.now()});
+      return;
+    }
+    const chunk = missing.slice(0, Math.max(1, Math.ceil(missing.length/20)));
+    chunk.forEach(r => {
+      s1ids.add(r.id);
+      bus.emit('record_stored', {server:'S1', record:{...r, storedAt:Date.now(), via:'sync', lagMs:undefined}});
+    });
+    st.copied += chunk.length;
+    bus.emit('sync_progress', {copied:st.copied, remaining:missing.length - chunk.length});
+  }
+
+  /* ---- experiment 7: load balancing (round robin / weighted round robin) ----
+     Smooth weighted round robin: each tick every UP server's current-weight
+     is incremented by its configured weight; the server with the highest
+     current-weight is picked, then that server's current-weight is reduced
+     by the total of all weights. Over many picks each server's share of
+     traffic converges to weight / total(weights). Plain round robin is the
+     same algorithm with every weight forced to 1. */
+  function pickBalanced(){
+    const up = [];
+    if(st.s1 === 'UP') up.push('s1');
+    if(st.s2 === 'UP') up.push('s2');
+    if(up.length === 0) return null;
+    if(up.length === 1) return up[0];
+    const w = {s1: st.algo === 'weighted' ? st.w1 : 1, s2: st.algo === 'weighted' ? st.w2 : 1};
+    st.cw.s1 += w.s1; st.cw.s2 += w.s2;
+    const total = w.s1 + w.s2;
+    const chosen = st.cw.s1 >= st.cw.s2 ? 's1' : 's2';
+    st.cw[chosen] -= total;
+    return chosen;
+  }
+
+  function ingestBalanced(at){
+    const server = pickBalanced();
+    if(!server){
+      if(!st.bothDownLogged){ st.bothDownLogged = true; bus.emit('server_status', {server:'ALL', status:'DOWN', at, balanced:true, both:true}); }
+      return;
+    }
+    st.bothDownLogged = false;
+    const f = createFlight(at);
+    f.handledBy = server.toUpperCase();
+    f.via = 'balanced'; f.algo = st.algo; f.w1 = st.w1; f.w2 = st.w2;
+    bus.emit('flight_created', {flight:f});
+    store(f.handledBy, f, at, st.algo === 'weighted' ? 'wrr' : 'rr');
+  }
+
+  function schedule(){
+    clearTimeout(st.timer);
+    st.timer = setTimeout(() => {
+      if(!st.paused){ if(st.mode === 'failover') ingestFailover(Date.now()); else ingestBalanced(Date.now()); }
+      schedule();
+    }, st.rate * (0.7 + Math.random()*0.6));
+  }
+
+  return {
+    start(){
+      const now = Date.now();
+      for(let i = 6; i >= 1; i--) ingestFailover(now - i*3500);
+      schedule();
+    },
+    setMode(mode){
+      st.mode = mode;
+      clearInterval(st.syncTimer); st.syncTimer = null;
+      st.s1 = 'UP'; st.s2 = 'UP';
+      st.cw = {s1:0, s2:0}; st.bothDownLogged = false;
+      bus.emit('mode_changed', {mode});
+      bus.emit('balance_config', {algo:st.algo, w1:st.w1, w2:st.w2});
+    },
+    setAlgo(algo){ st.algo = algo; st.cw = {s1:0, s2:0}; bus.emit('balance_config', {algo:st.algo, w1:st.w1, w2:st.w2}); },
+    setWeights(w1, w2){ st.w1 = w1; st.w2 = w2; st.cw = {s1:0, s2:0}; bus.emit('balance_config', {algo:st.algo, w1:st.w1, w2:st.w2}); },
+    crashS1(){
+      if(st.s1 === 'DOWN') return;
+      clearInterval(st.syncTimer); st.syncTimer = null;
+      const wasUp = st.s1 === 'UP';
+      st.s1 = 'DOWN';
+      bus.emit('server_status', {server:'S1', status:'DOWN', at:Date.now(), wasUp});
+    },
+    restoreS1(){
+      if(st.s1 !== 'DOWN') return;
+      st.s1 = 'SYNCING'; st.copied = 0;
+      bus.emit('server_status', {server:'S1', status:'SYNCING', at:Date.now(), missing:missingOnS1().length});
+      st.syncTimer = setInterval(syncTick, 100);
+    },
+    crashServer(id){
+      const key = id.toLowerCase();
+      if(st[key] === 'DOWN') return;
+      st[key] = 'DOWN';
+      bus.emit('server_status', {server:key.toUpperCase(), status:'DOWN', at:Date.now(), balanced:true});
+    },
+    restoreServer(id){
+      const key = id.toLowerCase();
+      if(st[key] !== 'DOWN') return;
+      st[key] = 'UP';
+      bus.emit('server_status', {server:key.toUpperCase(), status:'UP', at:Date.now(), balanced:true});
+    },
+    setPaused(p){ st.paused = p; },
+    setRate(ms){ st.rate = ms; }
+  };
+})();
+/* ===================== end of simulated backend ===================== */
+
+
+/* =====================================================================
+   UI
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const pad = (n,l=2) => String(n).padStart(l,'0');
+const fmt = (t,ms) => { const d = new Date(t); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())+(ms ? '.'+pad(d.getMilliseconds(),3) : ''); };
+const PLANE = '<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>';
+
+const ui = {
+  mode:'failover',
+  s1:'UP', s2:'UP',
+  failoverSince:null, downAt:null, s2Handled:0,
+  syncCopied:0, syncRemaining:0, okUntil:0,
+  algo:'weighted', w1:3, w2:1,
+  bCount:{S1:0, S2:0},
+  feed:[], byId:new Map(), count:{S1:0, S2:0}
+};
+const F = {atc:'', src:'', dst:'', type:''};
+const anyFilter = () => !!(F.atc || F.src || F.dst || F.type);
+const passes = f =>
+  (!F.atc  || f.originATC === F.atc || f.landingATC === F.atc) &&
+  (!F.src  || f.source.code === F.src) &&
+  (!F.dst  || f.destination.code === F.dst) &&
+  (!F.type || f.type === F.type);
+
+const feedEl = $('feed'), tb = {S1:$('tb1'), S2:$('tb2')}, logEl = $('log');
+
+/* ---------- log ---------- */
+function log(kind, msg){
+  const d = document.createElement('div');
+  d.className = 'ln ' + kind;
+  d.innerHTML = '<time>' + fmt(Date.now(), true) + '</time><span>' + msg + '</span>';
+  logEl.prepend(d);
+  while(logEl.children.length > 60) logEl.lastChild.remove();
+}
+
+/* ---------- flight strips ---------- */
+function repTextFailover(f){
+  if(f.handledBy === 'S1') return f.lagMs != null ? 'Copied to Server 2 after <b>' + f.lagMs + ' ms</b>' : 'Copying to Server 2…';
+  return f.synced ? 'Failover flight. Now synced back to Server 1.' : 'Failover flight. Stored on Server 2 only.';
+}
+function footerText(f){
+  if(f.via === 'balanced'){
+    return f.algo === 'weighted'
+      ? 'Assigned by weighted round robin (' + f.w1 + ':' + f.w2 + ')'
+      : 'Assigned by round robin';
+  }
+  return repTextFailover(f);
+}
+function stripEl(f, fresh){
+  const el = document.createElement('article');
+  el.className = 'strip ' + (f.handledBy === 'S1' ? 's1' : 's2') + (fresh ? ' fresh' : '');
+  el.dataset.id = f.id;
+  el.innerHTML =
+    '<div class="cell a"><span class="fno">' + f.flightNo + '</span><span class="type t-' + f.type + '">' + f.type + '</span></div>' +
+    '<div class="cell b"><div class="route">' +
+      '<div class="city"><span class="cname">' + f.source.name + '</span><span class="ccode">' + f.source.code + '</span></div>' +
+      '<div class="path" aria-hidden="true"><span class="line"></span>' + PLANE + '</div>' +
+      '<div class="city r"><span class="cname">' + f.destination.name + '</span><span class="ccode">' + f.destination.code + '</span></div>' +
+    '</div></div>' +
+    '<div class="cell c"><span class="lbl">Lands at</span><span class="val">' + f.landingATC + '</span><span class="sub">from ' + f.originATC + '</span></div>' +
+    '<div class="cell d"><span class="lbl">Sent</span><span class="val">' + fmt(f.timestamp) + '</span></div>' +
+    '<div class="foot"><span class="sw"></span><span>Stored on <b>Server ' + (f.handledBy === 'S1' ? 1 : 2) + '</b></span><span data-rep="' + f.id + '">' + footerText(f) + '</span></div>';
+  return el;
+}
+function renderFeed(){
+  feedEl.innerHTML = '';
+  let shown = 0;
+  for(const f of ui.feed){ if(passes(f)){ feedEl.appendChild(stripEl(f,false)); if(++shown >= 60) break; } }
+  updateCount();
+}
+function updateCount(){
+  const n = ui.feed.filter(passes).length;
+  $('feedCount').textContent = anyFilter() ? n + ' of ' + ui.feed.length + ' flights match' : ui.feed.length + ' flights';
+  const empty = $('empty');
+  empty.hidden = n !== 0;
+  empty.textContent = anyFilter() ? 'No flights match these filters. Clear a filter to see more.' : 'Waiting for flights from the ATC towers.';
+}
+
+/* ---------- server tables ---------- */
+function rowEl(server, r){
+  const tr = document.createElement('tr');
+  const cls = r.via === 'sync' ? 'sync' : server === 'S1' ? 's1' : 's2';
+  tr.className = 'fresh ' + cls;
+  const how = r.via === 'replica' ? 'copy +' + r.lagMs + ' ms'
+    : r.via === 'sync' ? 'synced back'
+    : r.via === 'wrr' ? 'weighted RR'
+    : r.via === 'rr' ? 'round robin'
+    : 'direct';
+  const vc = r.via === 'sync' ? 'ok' : cls;
+  tr.innerHTML = '<td>' + r.flightNo + '</td><td>' + r.src + ' to ' + r.dst + '</td><td>' + fmt(r.storedAt, true) + '</td><td><span class="via ' + vc + '">' + how + '</span></td>';
+  return tr;
+}
+
+/* ---------- failover status, banner ---------- */
+function renderNote1Failover(){
+  const n = $('note1'), s = ui.s1;
+  if(s === 'UP'){ n.className = 'strip-note ok'; n.innerHTML = '<b>Primary.</b> Receiving flights from all ATC towers.'; }
+  else if(s === 'DOWN'){ n.className = 'strip-note bad'; n.innerHTML = '<b>Offline since ' + fmt(ui.downAt) + '.</b> Not receiving flights.'; }
+  else {
+    const total = ui.syncCopied + ui.syncRemaining;
+    const pct = total ? Math.round(ui.syncCopied/total*100) : 100;
+    n.className = 'strip-note warn';
+    n.innerHTML = '<b>Syncing.</b><span class="bar"><i style="width:' + pct + '%"></i></span><span>' + ui.syncRemaining + ' left to copy</span>';
+  }
+}
+function renderBannerFailover(){
+  const b = $('banner');
+  if(ui.s1 === 'DOWN'){
+    b.className = 'banner';
+    b.innerHTML = '<strong>Failover active</strong><span>Server 1 is down. Server 2 has been handling every flight since ' + fmt(ui.failoverSince) + ' (' + ui.s2Handled + ' so far).</span>';
+    b.hidden = false;
+  } else if(ui.s1 === 'SYNCING'){
+    b.className = 'banner warn';
+    b.innerHTML = '<strong>Server 1 is back</strong><span>Copying the flights it missed from Server 2. New flights still go to Server 2 until the copy finishes.</span>';
+    b.hidden = false;
+  } else if(Date.now() < ui.okUntil){
+    b.className = 'banner ok';
+    b.innerHTML = '<strong>Recovered</strong><span>Server 1 is in sync and primary again. New flights are stored on Server 1.</span>';
+    b.hidden = false;
+  } else b.hidden = true;
+}
+
+/* ---------- balanced status, banner, split ---------- */
+function renderSplit(){
+  const c1 = ui.bCount.S1, c2 = ui.bCount.S2, tot = c1 + c2;
+  const p1 = tot ? Math.round(c1/tot*100) : 0, p2 = tot ? 100 - p1 : 0;
+  $('bar1').style.width = p1 + '%'; $('bar2').style.width = p2 + '%';
+  $('num1').textContent = c1 + ' (' + p1 + '%)';
+  $('num2').textContent = c2 + ' (' + p2 + '%)';
+  const totalW = ui.algo === 'weighted' ? ui.w1 + ui.w2 : 2;
+  const target1 = ui.algo === 'weighted' ? Math.round(ui.w1/totalW*100) : 50;
+  $('balanceDesc').textContent = ui.algo === 'weighted'
+    ? 'Weighted round robin: Server 1 gets ' + ui.w1 + ' turns per cycle and Server 2 gets ' + ui.w2 + ', so the live split should settle near ' + target1 + '% / ' + (100-target1) + '%.'
+    : 'Round robin: both servers take turns one-for-one, so the live split should settle near 50% / 50%.';
+}
+function renderBannerBalanced(){
+  const b = $('banner');
+  if(ui.s1 === 'DOWN' && ui.s2 === 'DOWN'){
+    b.className = 'banner'; b.innerHTML = '<strong>Both servers down</strong><span>No server is available. New flights cannot be stored.</span>'; b.hidden = false;
+  } else if(ui.s1 === 'DOWN'){
+    b.className = 'banner warn'; b.innerHTML = '<strong>Server 1 down</strong><span>Every new flight is going to Server 2.</span>'; b.hidden = false;
+  } else if(ui.s2 === 'DOWN'){
+    b.className = 'banner warn'; b.innerHTML = '<strong>Server 2 down</strong><span>Every new flight is going to Server 1.</span>'; b.hidden = false;
+  } else b.hidden = true;
+}
+function renderNoteBalanced(which){
+  const n = $(which === 'S1' ? 'note1' : 'note2');
+  const s = which === 'S1' ? ui.s1 : ui.s2;
+  if(s === 'UP'){ n.className = 'strip-note ' + (which === 'S1' ? 'ok' : 's2'); n.innerHTML = '<b>Active.</b> Taking a share of flights directly, split by the scheduler.'; }
+  else { n.className = 'strip-note bad'; n.innerHTML = '<b>Down.</b> Not receiving flights. Not backfilled automatically in this experiment.'; }
+}
+
+/* ---------- combined status render ---------- */
+function renderStatus(){
+  if(ui.mode === 'failover'){
+    const s = ui.s1;
+    $('dot1').className = 'dot ' + (s === 'UP' ? 'up' : s === 'DOWN' ? 'down' : 'sync');
+    $('st1').textContent = s === 'UP' ? 'Up, primary' : s === 'DOWN' ? 'Down' : 'Back online, syncing';
+    $('dot2').className = 'dot ' + (s === 'UP' ? 'standby' : 'up');
+    $('st2').textContent = s === 'UP' ? 'Standby, replicating' : 'Active, handling all flights';
+    $('btnCrash').disabled = s === 'DOWN';
+    $('btnRestore').disabled = s !== 'DOWN';
+    $('p1').classList.toggle('down', s === 'DOWN');
+    $('p2').classList.toggle('down', false);
+    $('h1').textContent = 'Server 1 (primary)';
+    $('h2').textContent = 'Server 2 (secondary)';
+    renderNote1Failover();
+    const n2 = $('note2');
+    if(s === 'UP'){ n2.className = 'strip-note'; n2.innerHTML = '<b>Standby.</b> Receiving a live copy of everything Server 1 stores.'; }
+    else { n2.className = 'strip-note s2'; n2.innerHTML = '<b>Active.</b> Receiving flights directly from the ATC towers.'; }
+    renderBannerFailover();
+  } else {
+    $('dot1').className = 'dot ' + (ui.s1 === 'UP' ? 'up' : 'down');
+    $('st1').textContent = ui.s1 === 'UP' ? 'Up, active' : 'Down';
+    $('dot2').className = 'dot ' + (ui.s2 === 'UP' ? 'up' : 'down');
+    $('st2').textContent = ui.s2 === 'UP' ? 'Up, active' : 'Down';
+    $('btnCrash1').disabled = ui.s1 === 'DOWN'; $('btnRestore1').disabled = ui.s1 !== 'DOWN';
+    $('btnCrash2').disabled = ui.s2 === 'DOWN'; $('btnRestore2').disabled = ui.s2 !== 'DOWN';
+    $('p1').classList.toggle('down', ui.s1 === 'DOWN');
+    $('p2').classList.toggle('down', ui.s2 === 'DOWN');
+    $('h1').textContent = 'Server 1';
+    $('h2').textContent = 'Server 2';
+    renderNoteBalanced('S1'); renderNoteBalanced('S2');
+    renderBannerBalanced();
+    renderSplit();
+  }
+}
+function toggleModeUI(mode){
+  $('failoverBtns').hidden = mode !== 'failover';
+  $('balancePanel').hidden = mode !== 'balanced';
+  $('tagline').textContent = mode === 'failover'
+    ? 'Simulated demo. Server 1 is primary, Server 2 takes over if it goes down.'
+    : 'Simulated demo. Both servers take flights directly, split by the scheduler below.';
+}
+
+/* ---------- event handlers ---------- */
+bus.on('flight_created', ({flight:f}) => {
+  ui.byId.set(f.id, f);
+  ui.feed.unshift(f);
+  if(ui.feed.length > 300){ ui.byId.delete(ui.feed.pop().id); }
+  if(f.via === 'failover' && f.handledBy === 'S2') ui.s2Handled++;
+  if(passes(f)){
+    feedEl.prepend(stripEl(f, true));
+    while(feedEl.children.length > 60) feedEl.lastChild.remove();
+  }
+  updateCount();
+  if(ui.mode === 'failover' && ui.s1 === 'DOWN') renderBannerFailover();
+});
+
+bus.on('record_stored', ({server, record:r}) => {
+  const body = tb[server];
+  body.prepend(rowEl(server, r));
+  while(body.rows.length > 40) body.lastChild.remove();
+  ui.count[server]++;
+  $(server === 'S1' ? 'cnt1' : 'cnt2').textContent = ui.count[server] + ' records';
+  if(r.via === 'rr' || r.via === 'wrr'){ ui.bCount[server]++; if(ui.mode === 'balanced') renderSplit(); }
+  const f = ui.byId.get(r.id);
+  if(f){
+    if(r.via === 'replica') f.lagMs = r.lagMs;
+    if(r.via === 'sync') f.synced = true;
+    const el = feedEl.querySelector('[data-rep="' + f.id + '"]');
+    if(el) el.innerHTML = footerText(f);
+  }
+});
+
+bus.on('server_status', e => {
+  if(e.balanced){
+    if(e.both){ log('bad', 'Both servers are down. New flights cannot be stored.'); renderStatus(); return; }
+    if(e.server === 'S1') ui.s1 = e.status; else ui.s2 = e.status;
+    log(e.status === 'DOWN' ? 'bad' : 'ok', 'Server ' + e.server.slice(1) + ' ' + (e.status === 'DOWN' ? 'went down. Traffic is now shifting to the other server.' : 'is back up and rejoined the rotation.'));
+    renderStatus();
+    return;
+  }
+  // failover-mode events (always about S1)
+  ui.s1 = e.status;
+  if(e.status === 'DOWN'){
+    ui.downAt = e.at;
+    if(!ui.failoverSince){ ui.failoverSince = e.at; ui.s2Handled = 0; }
+    log('bad', e.wasUp === false
+      ? 'Server 1 went down again during the sync. Server 2 keeps handling flights.'
+      : 'Server 1 stopped responding. Server 2 is now active and stores every new flight.');
+  } else if(e.status === 'SYNCING'){
+    ui.syncCopied = 0; ui.syncRemaining = e.missing;
+    log('warn', 'Server 1 is back. Copying ' + e.missing + ' missed flight' + (e.missing === 1 ? '' : 's') + ' from Server 2.');
+  } else {
+    ui.failoverSince = null;
+    ui.okUntil = Date.now() + 6000;
+    setTimeout(renderStatus, 6100);
+    log('ok', 'Server 1 is in sync and primary again. Server 2 is back on standby.');
+  }
+  renderStatus();
+});
+
+bus.on('sync_progress', e => {
+  ui.syncCopied = e.copied; ui.syncRemaining = e.remaining;
+  if(ui.mode === 'failover') renderNote1Failover();
+});
+
+bus.on('balance_config', e => {
+  ui.algo = e.algo; ui.w1 = e.w1; ui.w2 = e.w2;
+  ui.bCount = {S1:0, S2:0};
+  if(ui.mode === 'balanced') renderSplit();
+});
+
+/* ---------- controls: filters ---------- */
+function fill(sel, opts){
+  sel.innerHTML = '<option value="">All</option>' + opts.map(o => '<option value="' + o[0] + '">' + o[1] + '</option>').join('');
+}
+const byName = [...CITIES].sort((a,b) => a.name.localeCompare(b.name));
+fill($('fAtc'), byName.map(c => ['ATC-' + c.code, 'ATC-' + c.code]));
+fill($('fSrc'), byName.map(c => [c.code, c.name + ' (' + c.code + ')']));
+fill($('fDst'), byName.map(c => [c.code, c.name + ' (' + c.code + ')']));
+fill($('fType'), TYPES.map(t => [t, t[0].toUpperCase() + t.slice(1)]));
+[['fAtc','atc'],['fSrc','src'],['fDst','dst'],['fType','type']].forEach(([id,key]) => {
+  $(id).addEventListener('change', e => { F[key] = e.target.value; renderFeed(); });
+});
+$('btnClear').addEventListener('click', () => {
+  ['fAtc','fSrc','fDst','fType'].forEach(id => $(id).value = '');
+  F.atc = F.src = F.dst = F.type = '';
+  renderFeed();
+});
+
+/* ---------- controls: mode + experiment 6 (failover) ---------- */
+$('modeSel').addEventListener('change', e => {
+  const m = e.target.value;
+  sim.setMode(m);
+  ui.mode = m;
+  toggleModeUI(m);
+  log('', m === 'balanced'
+    ? 'Switched to experiment 7: load balancing. Both servers now take flights directly.'
+    : 'Switched to experiment 6: failover. Server 1 is primary again.');
+  renderStatus();
+});
+$('btnCrash').addEventListener('click', () => sim.crashS1());
+$('btnRestore').addEventListener('click', () => sim.restoreS1());
+
+/* ---------- controls: experiment 7 (load balancing) ---------- */
+$('algoSel').addEventListener('change', e => {
+  const weighted = e.target.value === 'weighted';
+  $('w1').disabled = !weighted; $('w2').disabled = !weighted;
+  sim.setAlgo(e.target.value);
+  log('', weighted ? 'Switched to weighted round robin.' : 'Switched to plain round robin (equal turns).');
+});
+function applyWeights(){
+  const w1 = Math.max(1, Math.min(9, +$('w1').value || 1));
+  const w2 = Math.max(1, Math.min(9, +$('w2').value || 1));
+  $('w1').value = w1; $('w2').value = w2;
+  sim.setWeights(w1, w2);
+  log('', 'Weights set to ' + w1 + ':' + w2 + '.');
+}
+$('w1').addEventListener('change', applyWeights);
+$('w2').addEventListener('change', applyWeights);
+$('btnCrash1').addEventListener('click', () => sim.crashServer('s1'));
+$('btnRestore1').addEventListener('click', () => sim.restoreServer('s1'));
+$('btnCrash2').addEventListener('click', () => sim.crashServer('s2'));
+$('btnRestore2').addEventListener('click', () => sim.restoreServer('s2'));
+
+/* ---------- controls: traffic ---------- */
+$('btnPause').addEventListener('click', e => {
+  const paused = e.target.textContent === 'Pause traffic';
+  sim.setPaused(paused);
+  e.target.textContent = paused ? 'Resume traffic' : 'Pause traffic';
+  log('', paused ? 'Traffic paused. No new flights until you resume.' : 'Traffic resumed.');
+});
+$('rate').addEventListener('change', e => sim.setRate(+e.target.value));
+
+setInterval(() => { $('clock').textContent = fmt(Date.now()); }, 1000);
+$('clock').textContent = fmt(Date.now());
+
+/* ---------- go ---------- */
+toggleModeUI('failover');
+renderStatus();
+updateCount();
+renderSplit();
+log('', 'Monitor started. Server 1 is primary, Server 2 is standing by.');
+sim.start();
+})();
+</script>
+</body>
+</html>
