@@ -55,14 +55,14 @@ flowchart TD
     
     %% Mode 1: Failover
     Scheduler -->|Direct Ingestion| Store1
-    Store1 -.->|Async Replication Log\n(~40-140ms Lag)| Store2
+    Store1 -.->|"Async Replication Log (~40-140ms Lag)"| Store2
     
     %% Mode 2: Failover Route
-    Scheduler -.->|Hot Failover on Fault| Store2
+    Scheduler -.->|"Hot Failover on Fault"| Store2
 
     %% Mode 3: Load Balancing
-    Scheduler ===|WRR Capacity Split| Store1
-    Scheduler ===|WRR Capacity Split| Store2
+    Scheduler ===|"WRR Capacity Split"| Store1
+    Scheduler ===|"WRR Capacity Split"| Store2
 ```
 
 ---
